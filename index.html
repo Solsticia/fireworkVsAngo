@@ -13,13 +13,20 @@
         margin: 0;
         padding: 0;
         overflow: hidden;
+        cursor: crosshair;
     }
 
     #canvas {
         height: 100%;
         width: 100%;
         background-color: black;
+        background:
+            linear-gradient(rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0.7)),
+            /*Cast the Dark Shadow*/
+            url('b2.jpg') no-repeat center center/cover;
+        /* Background image */
     }
+
 
     .monster {
         position: absolute;
@@ -34,25 +41,19 @@
         right: 0;
         /* Position to the right of the monster */
         color: white;
-        /* Set text color to white */
         background-color: rgba(0, 0, 0, 0.5);
-        /* Optional: Background for visibility */
         font-family: Arial, sans-serif;
         font-size: 12px;
         padding: 2px;
-        /* Add some padding for readability */
         z-index: 1;
-        /* Ensure it is on top of the monster */
     }
-
-
 
     #scoreboard {
         position: absolute;
         top: 10px;
         right: 20px;
         color: white;
-        font-family: Arial, sans-serif;
+        font-family: Georgia, serif;
         font-size: 18px;
     }
 
@@ -64,13 +65,38 @@
         width: 100%;
         height: 100%;
         background-color: rgba(0, 0, 0, 0.8);
-        color: white;
+        color: rgb(255, 255, 255);
         font-family: Arial, sans-serif;
         font-size: 24px;
         text-align: center;
         line-height: 100vh;
         z-index: 1000;
     }
+
+    /* Music Player Styles */
+    .music-player-container {
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            width: 100%;
+            position: absolute;
+            bottom: 20px;
+            padding-right: 50px;
+        }
+
+        .music-player-container button {
+            background-color: rgba(255, 255, 255, 0.7);
+            color: black;
+            border: none;
+            font-size: 1.5em;
+            padding: 10px;
+            margin: 0 10px;
+            cursor: pointer;
+        }
+
+        .music-player-container button:hover {
+            background-color: rgba(255, 255, 255, 1);
+        }
 </style>
 
 <body>
@@ -82,6 +108,10 @@
         <button id="apply">Apply</button>
     </div>
     <div id="pause-overlay">Click [Space] to Resume</div>
+    <!-- Music Player Controls -->
+    <div class="music-player-container">
+        <button id="playPauseBtn">▶️ Play</button>
+    </div>
 </body>
 <script>
     // Fireworks Code
@@ -100,7 +130,7 @@
         ch = window.innerHeight,
         fireworks = [],
         particles = [],
-        hue = 120,
+        hue = 380,
         limiterTotal = 5,
         limiterTick = 0,
         timerTotal = 10,
@@ -258,11 +288,11 @@
 
         const hpProbability = Math.random();
         if (hpProbability < 0.2) {
-            monsterContainer.hp = 30;
+            monsterContainer.hp = 15 + Math.floor(score / 85);
         } else if (hpProbability < 0.21) {
-            monsterContainer.hp = 100;
+            monsterContainer.hp = 30 + Math.floor(score / 75);
         } else {
-            monsterContainer.hp = 20;
+            monsterContainer.hp = 10 + Math.floor(score / 85);
         }
 
         // Create the monster image
@@ -280,9 +310,9 @@
         hpDisplay.style.position = 'absolute';
         hpDisplay.style.bottom = '0';
         hpDisplay.style.right = '0';
-        hpDisplay.style.backgroundColor = 'rgba(0, 0, 0, 0.6)'; // Improve visibility
+        hpDisplay.style.backgroundColor = 'rgba(0, 0, 0, 0.6)';
         hpDisplay.style.color = 'white';
-        hpDisplay.style.fontSize = '10px';
+        hpDisplay.style.fontSize = '12px';
         hpDisplay.style.padding = '2px';
 
         // Append the image and HP display to the monster container
@@ -295,20 +325,22 @@
     }
 
 
-
-
-
     function updateMonsters() {
         monsters.forEach((monster, index) => {
             const top = parseFloat(monster.style.top);
             monster.style.top = top + 2 + 'px';
 
             if (monster.hp <= 0) {
-                score++;
+                score += 5;
                 updateScoreboard();
 
                 if (score % 10 === 0) {
-                    spawnFrequency *= 0.97;
+                    if (score <= 100) {
+                        spawnFrequency *= 0.96;
+                    } else {
+                        spawnFrequency *= 0.985;
+                    }
+
                     clearInterval(spawnInterval);
                     spawnInterval = setInterval(createMonster, spawnFrequency);
                 }
@@ -362,7 +394,7 @@
     function loop() {
         requestAnimFrame(loop);
 
-        hue += 0.5;
+        //hue += 0.5;
         ctx.globalCompositeOperation = 'destination-out';
         ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
         ctx.fillRect(0, 0, cw, ch);
@@ -379,22 +411,19 @@
         }
 
         if (timerTick >= timerTotal) {
-            if (!mousedown) {
-                fireworks.push(new Firework(random(cw / 5, cw / 5 * 4), ch, random(0, cw), random(0, ch / 2)));
-                timerTick = 0;
-            }
+            fireworks.push(new Firework(cw / 2, ch, mx, my)); // 始终发射烟花到鼠标位置
+            timerTick = 0;
         } else {
             timerTick++;
         }
 
-        if (limiterTick >= limiterTotal) {
-            if (mousedown) {
-                fireworks.push(new Firework(cw / 2, ch, mx, my));
-                limiterTick = 0;
-            }
+        if (mousedown && limiterTick >= limiterTotal) {
+            fireworks.push(new Firework(cw / 2, ch, mx, my)); // 鼠标按下时也可以快速发射
+            limiterTick = 0;
         } else {
             limiterTick++;
         }
+
     }
     function gameOver() {
         // Stop spawning monsters
@@ -434,8 +463,6 @@
         scoreDisplay.style.marginBottom = '20px';
         gameOverOverlay.appendChild(scoreDisplay);
 
-
-
         // Append overlay to the body
         document.body.appendChild(gameOverOverlay);
     }
@@ -472,7 +499,7 @@
         document.body.appendChild(pauseLabel);
     }
 
-    
+
     document.getElementById('apply').addEventListener('click', () => {
         clearInterval(spawnInterval);
         const frequency = parseInt(document.getElementById('freq').value);
@@ -510,29 +537,71 @@
         mousedown = false;
     });
     // Function to handle both click and touchstart events
-function handleInput(event) {
-    event.preventDefault();
+    function handleInput(event) {
+        event.preventDefault();
 
-    // Get input coordinates based on the event type
-    let inputX, inputY;
-    if (event.type === 'click') {
-        inputX = event.clientX - canvas.offsetLeft;
-        inputY = event.clientY - canvas.offsetTop;
-    } else if (event.type === 'touchstart') {
-        inputX = event.touches[0].clientX - canvas.offsetLeft;
-        inputY = event.touches[0].clientY - canvas.offsetTop;
+        // Get input coordinates based on the event type
+        let inputX, inputY;
+        if (event.type === 'mousemove') {
+            inputX = event.clientX - canvas.offsetLeft;
+            inputY = event.clientY - canvas.offsetTop;
+        } else if (event.type === 'touchmove') {
+            inputX = event.touches[0].clientX - canvas.offsetLeft;
+            inputY = event.touches[0].clientY - canvas.offsetTop;
+        }
+
+        console.log(`Interaction at: (${inputX}, ${inputY})`);
+        // Example action: Create a firework or interact with the game
+        fireworks.push(new Firework(cw / 2, ch, inputX, inputY));
+
     }
 
-    // Use inputX and inputY to trigger necessary actions
-    console.log(`Interaction at: (${inputX}, ${inputY})`);
-    // Example action: Create a firework or interact with the game
-    fireworks.push(new Firework(cw / 2, ch, inputX, inputY));
-}
+    // Throttle function to optimize event triggering
+    function throttle(callback, limit) {
+        let waiting = false;
+        return function (...args) {
+            if (!waiting) {
+                callback.apply(this, args);
+                waiting = true;
+                setTimeout(() => (waiting = false), limit);
+            }
+        };
+    }
 
-// Attach event listeners for both `click` and `touchstart`
-canvas.addEventListener('click', handleInput);
-canvas.addEventListener('touchstart', handleInput);
+    // Attach event listeners for both `mousemove` and `touchmove`
+    const throttledHandleInput = throttle(handleInput, 100); // Adjust the limit (ms) for desired responsiveness
+    canvas.addEventListener('mousemove', throttledHandleInput);
+    canvas.addEventListener('touchmove', throttledHandleInput);
 
+     // Music Player Logic
+     let isPlaying = false;
+        const playPauseBtn = document.getElementById('playPauseBtn');
+        let audio = new Audio(); // We'll load the audio dynamically later
+
+        // Placeholder for the music collection
+        const musicCollection = ['song1.mp3', 'song2.mp3'];
+
+
+        function playNextSong() {
+            const randomSong = musicCollection[Math.floor(Math.random() * musicCollection.length)];
+            audio.src = 'music_collection/' + randomSong; // Make sure this folder exists
+            audio.play();
+        }
+
+        playPauseBtn.addEventListener('click', function() {
+            if (isPlaying) {
+                audio.pause();
+                playPauseBtn.textContent = '▶️ Play';
+            } else {
+                if (audio.paused || audio.ended) {
+                    playNextSong();
+                }
+                playPauseBtn.textContent = '⏸️ Pause';
+            }
+            isPlaying = !isPlaying;
+        });
+
+        audio.addEventListener('ended', playNextSong); // Automatically play next song when one finishes
 </script>
 
 </html>
