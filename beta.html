@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <title>Fireworks with Monsters</title>
+</head>
+<style>
+    html,
+    body {
+        height: 100%;
+        width: 100%;
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+        cursor: crosshair;
+    }
+
+    #canvas {
+        height: 100%;
+        width: 100%;
+        background-color: black;
+        background:
+            linear-gradient(rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0.7)),
+
+            url('b2.jpg') no-repeat center center/cover;
+        /* Background image */
+    }
+
+    .monster {
+        position: absolute;
+        width: 50px;
+        height: 50px;
+    }
+
+    .monster-hp {
+        position: absolute;
+        bottom: 0;
+        right: 0;
+        color: white;
+        background-color: rgba(0, 0, 0, 0.5);
+        font-family: Arial, sans-serif;
+        font-size: 12px;
+        padding: 2px;
+        z-index: 1;
+    }
+
+    #scoreboard {
+        position: absolute;
+        top: 10px;
+        right: 20px;
+        color: white;
+        font-family: Georgia, serif;
+        font-size: 18px;
+    }
+
+    #pause-overlay {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.8);
+        color: rgb(255, 255, 255);
+        font-family: Arial, sans-serif;
+        font-size: 24px;
+        text-align: center;
+        line-height: 100vh;
+        z-index: 1000;
+    }
+
+    /* Music Player Styles */
+    .music-player-container {
+        display: flex;
+        justify-content: flex-end;
+        align-items: center;
+        width: 100%;
+        position: absolute;
+        bottom: 20px;
+        padding-right: 50px;
+    }
+
+    .music-player-container button {
+        background-color: rgba(255, 255, 255, 0.7);
+        color: black;
+        border: none;
+        font-size: 1.5em;
+        padding: 10px;
+        margin: 0 10px;
+        cursor: pointer;
+    }
+
+    .music-player-container button:hover {
+        background-color: rgba(255, 255, 255, 1);
+    }
+
+    #replayButton {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, +175%);
+        padding: 10px 20px;
+        font-size: 18px;
+        color: white;
+        background: #333;
+        border: 1px solid white;
+        cursor: pointer;
+        display: none;
+        border-radius: 5px;
+        /* Rounded corners for modern look */
+        box-shadow: 0 0 20px rgba(255, 255, 255, 0.6);
+        /* White glow effect */
+        transition: transform 0.3s ease, box-shadow 0.3s ease;
+        /* Smooth animation on hover */
+        animation: pulse 1.5s infinite;
+        /* Pulsating animation */
+    }
+</style>
+
+<body>
+    <canvas id="canvas"></canvas>
+    <div id="scoreboard">Score: 0</div>
+    <div id="console">
+        <label>Frequency (ms): <input id="freq" type="number" value="2000"></label><br>
+        <label>Monster Size: <input id="size" type="number" value="50"></label><br>
+        <button id="apply">Apply</button>
+    </div>
+
+    <!--d hack what is the spawn frequency!!!-->
+    <div id="pause-overlay">Click [Space] to Resume</div>
+    <!-- Music Player Controls -->
+    <div class="music-player-container">
+        <button id="playPauseBtn">▶️ Play</button>
+    </div>
+    <button id="replayButton">Replay</button>
+
+
+
+
+
+
+
+
+    <script>
+        // Fireworks Code
+        window.requestAnimFrame = (function () {
+            return window.requestAnimationFrame ||
+                window.webkitRequestAnimationFrame ||
+                window.mozRequestAnimationFrame ||
+                function (callback) {
+                    window.setTimeout(callback, 1000 / 60);
+                };
+        })();
+
+        const replayButton = document.getElementById('replayButton'); // Replay button reference
+
+        var canvas = document.getElementById('canvas'),
+            ctx = canvas.getContext('2d'),
+            cw = window.innerWidth,
+            ch = window.innerHeight,
+            fireworks = [],
+            particles = [],
+            hue = 400,
+            limiterTotal = 5,
+            limiterTick = 0,
+            timerTotal = 10,
+            timerTick = 0,
+            mousedown = false,
+            mx,
+            my;
+
+        canvas.width = cw;
+        canvas.height = ch;
+
+
+        const centerX = canvas.width / 2;
+        const centerY = canvas.height / 2;
+
+        function random(min, max) { return Math.random() * (max - min) + min; }
+
+        function calculateDistance(p1x, p1y, p2x, p2y) {
+            var xDistance = p1x - p2x,
+                yDistance = p1y - p2y;
+            return Math.sqrt(Math.pow(xDistance, 2) + Math.pow(yDistance, 2));
+        }
+
+        class Firework {
+            constructor(sx, sy, tx, ty) {
+                this.x = sx;
+                this.y = sy;
+                this.sx = sx;
+                this.sy = sy;
+                this.tx = tx;
+                this.ty = ty;
+                this.distanceToTarget = calculateDistance(sx, sy, tx, ty);
+                this.distanceTraveled = 0;
+                this.coordinates = [];
+                this.coordinateCount = 3;
+                while (this.coordinateCount--) {
+                    this.coordinates.push([this.x, this.y]);
+                }
+                this.angle = Math.atan2(ty - sy, tx - sx);
+                this.speed = 10;
+                this.acceleration = 1.05;
+                this.brightness = random(50, 70);
+                this.targetRadius = 10;
+            }
+
+            update(index) {
+                this.coordinates.pop();
+                this.coordinates.unshift([this.x, this.y]);
+
+                if (this.targetRadius < 8) {
+                    this.targetRadius += 0.3;
+                } else {
+                    this.targetRadius = 1;
+                }
+
+                this.speed *= this.acceleration;
+
+                var vx = Math.cos(this.angle) * this.speed,
+                    vy = Math.sin(this.angle) * this.speed;
+                this.distanceTraveled = calculateDistance(this.sx, this.sy, this.x + vx, this.y + vy);
+
+                if (this.distanceTraveled >= this.distanceToTarget) {
+                    createParticles(this.tx, this.ty);
+                    checkCollision(this.tx, this.ty, true);
+                    fireworks.splice(index, 1);
+                } else {
+                    this.x += vx;
+                    this.y += vy;
+                    checkCollision(this.x, this.y, false);
+                }
+            }
+
+            draw() {
+                ctx.beginPath();
+                ctx.moveTo(this.coordinates[this.coordinates.length - 1][0], this.coordinates[this.coordinates.length - 1][1]);
+                ctx.lineTo(this.x, this.y);
+                ctx.strokeStyle = 'hsl(' + hue + ', 100%, ' + this.brightness + '%)';
+                ctx.stroke();
+
+                ctx.beginPath();
+                ctx.arc(this.tx, this.ty, this.targetRadius, 0, Math.PI * 2);
+                ctx.stroke();
+            }
+        }
+
+        class Particle {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.coordinates = [];
+                this.coordinateCount = 5;
+                while (this.coordinateCount--) {
+                    this.coordinates.push([this.x, this.y]);
+                }
+                this.angle = random(0, Math.PI * 2);
+                this.speed = random(12, 15);
+                this.speed *= Math.sin(Math.random() * Math.PI - Math.PI / 2);
+                this.friction = 0.95;
+                this.gravity = 1.5;
+                this.hue = random(hue - 7, hue + 7);
+                this.brightness = random(50, 80);
+                this.alpha = 1;
+                this.decay = random(0.010, 0.02);
+            }
+
+            update(index) {
+                this.coordinates.pop();
+                this.coordinates.unshift([this.x, this.y]);
+                this.speed *= this.friction;
+                this.x += Math.cos(this.angle) * this.speed;
+                this.y += Math.sin(this.angle) * this.speed + this.gravity;
+                this.alpha -= this.decay;
+
+                if (this.alpha <= this.decay) {
+                    particles.splice(index, 1);
+                }
+            }
+
+            draw() {
+                ctx.beginPath();
+                ctx.lineWidth = 3;
+                ctx.moveTo(this.coordinates[this.coordinates.length - 1][0], this.coordinates[this.coordinates.length - 1][1]);
+                ctx.lineTo(this.x, this.y);
+                ctx.strokeStyle = 'hsla(' + this.hue + ', 100%, ' + this.brightness + '%, ' + this.alpha + ')';
+                ctx.stroke();
+            }
+        }
+
+        function createParticles(x, y) {
+            var particleCount = 100;
+            while (particleCount--) { particles.push(new Particle(x, y)); }
+        }
+
+        // Monster Code
+        const monsters = [];
+        let score = 0;
+        let spawnFrequency = 2000;
+        let gamePaused = false;
+        let spawnInterval;
+
+        function updateScoreboard() {
+            document.getElementById('scoreboard').textContent = `Score: ${score}`;
+        }
+
+        function createMonster() {
+            if (gg == 0) {
+                const monsterContainer = document.createElement('div'); // Container for the monster and HP
+                monsterContainer.classList.add('monster');
+                const size = parseInt(document.getElementById('size').value);
+                monsterContainer.style.width = size + 'px';
+                monsterContainer.style.height = 'auto'; // Height will be determined by the image
+                monsterContainer.style.position = 'absolute';
+                monsterContainer.style.left = Math.random() * (window.innerWidth - size) + 'px';
+                monsterContainer.style.top = '0px';
+
+
+                const hpProbability = Math.random();
+                if (hpProbability < 0.2) { monsterContainer.hp = 15 + Math.floor(score / 150); }
+                else if (hpProbability < 0.21) { monsterContainer.hp = 30 + Math.floor(score / 100); }
+                else { monsterContainer.hp = 10 + Math.floor(score / 150); }
+
+                // Create the monster image
+                const monsterImage = document.createElement('img');
+                monsterImage.src = 'monster.png';
+                // change it to red envelopes and the score to $ for the spring festival theme. 
+
+                monsterImage.style.width = '100%'; // Fill the container
+                monsterImage.style.height = 'auto'; // Maintain aspect ratio
+
+                // Create the HP display
+                const hpDisplay = document.createElement('div');
+                hpDisplay.classList.add('monster-hp');
+                hpDisplay.textContent = monsterContainer.hp;
+
+                // Position HP display at the bottom-right of the monster container
+                hpDisplay.style.position = 'absolute';
+                hpDisplay.style.bottom = '0';
+                hpDisplay.style.right = '0';
+                hpDisplay.style.backgroundColor = 'rgba(0, 0, 0, 0.6)';
+                hpDisplay.style.color = 'white';
+                hpDisplay.style.fontSize = '12px';
+                hpDisplay.style.padding = '2px';
+
+                // Append the image and HP display to the monster container
+                monsterContainer.appendChild(monsterImage);
+                monsterContainer.appendChild(hpDisplay);
+
+                // Add the monster container to the document
+                document.body.appendChild(monsterContainer);
+                monsters.push(monsterContainer);
+            }
+        }
+
+
+        function updateMonsters() {
+            monsters.forEach((monster, index) => {
+                const top = parseFloat(monster.style.top);
+                monster.style.top = top + 2 + 'px';
+
+                if (monster.hp <= 0) {
+                    if (gg == 0) { score += 5; }
+                    updateScoreboard();
+                    if (score % 10 === 0) {
+                        if (score <= 100) { spawnFrequency *= 0.96; }
+                        else if (score <= 1000) { spawnFrequency *= 0.992; }
+                        else { spawnFrequency *= 0.998; }
+                        clearInterval(spawnInterval);
+                        spawnInterval = setInterval(createMonster, spawnFrequency);
+                    }
+                    monster.remove();
+                    monsters.splice(index, 1);
+                } else if (top >= window.innerHeight - 50 && gg==0) {
+                    endGame("Time's Up!");
+                }
+                const hpDisplay = monster.querySelector('.monster-hp');
+                hpDisplay.textContent = monster.hp;
+            });
+        }
+
+        function checkCollision(fx, fy, isEndpoint) {
+            monsters.forEach((monster) => {
+                const size = parseInt(document.getElementById('size').value);
+                const mx = parseFloat(monster.style.left) + size / 2;
+                const my = parseFloat(monster.style.top) + size / 2;
+                const distance = calculateDistance(fx, fy, mx, my);
+
+                if (distance < size) {
+                    if (isEndpoint || !isEndpoint) {
+                        monster.hp--;
+                    }
+                }
+            });
+        }
+
+        function togglePause() {
+            gamePaused = !gamePaused;
+            const overlay = document.getElementById('pause-overlay');
+
+            if (gamePaused) {
+                overlay.style.display = 'block';
+                clearInterval(spawnInterval);
+            } else {
+                overlay.style.display = 'none';
+                spawnInterval = setInterval(createMonster, spawnFrequency);
+            }
+        }
+
+        var round=1;
+
+        function gameLoop() {
+            if (!gamePaused) {
+                updateMonsters();
+            }
+            requestAnimFrame(gameLoop);
+        }
+
+        // Fireworks Loop
+        let add = 1;
+        function loop() {
+            requestAnimFrame(loop);
+
+            if (add == 1) {
+                hue += 0.03; if (hue > 385) { add = 0; }
+            } else { hue -= 0.03; if (hue < 365) { add = 1; } }
+
+            ctx.globalCompositeOperation = 'destination-out';
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+            ctx.fillRect(0, 0, cw, ch);
+            ctx.globalCompositeOperation = 'lighter';
+
+            for (var i = fireworks.length - 1; i >= 0; i--) {
+                fireworks[i].draw();
+                fireworks[i].update(i);
+            }
+
+            for (var i = particles.length - 1; i >= 0; i--) {
+                particles[i].draw();
+                particles[i].update(i);
+            }
+
+            if (timerTick >= timerTotal) {
+                fireworks.push(new Firework(0.4 * cw, ch, mx, my)); // 始终发射烟花到鼠标位置
+                if (score >= 1000) { fireworks.push(new Firework(0.35 * cw, ch, mx, my)); }
+                if (score >= 3500) { fireworks.push(new Firework(0.3 * cw, ch, mx, my)); }
+                if (score >= 8000) { fireworks.push(new Firework(0.1 * cw, ch, mx, my)); }
+                timerTick = 0;
+            } else { timerTick += 2; }
+
+            if (mousedown && limiterTick >= limiterTotal) {
+                fireworks.push(new Firework(0.6 * cw, ch, mx, my)); // 鼠标按下时也可以快速发射
+                if (score >= 1000) { fireworks.push(new Firework(0.65 * cw, ch, mx, my)); }
+                if (score >= 3500) { fireworks.push(new Firework(0.7 * cw, ch, mx, my)); }
+                if (score >= 8000) { fireworks.push(new Firework(0.9 * cw, ch, mx, my)); }
+                limiterTick = 0;
+            } else { limiterTick++; }
+
+        }
+        let gg = 0;
+
+        replayButton.addEventListener('click', resetGame); // Replay button click
+
+        function endGame(message) {
+            gg = 1;
+            clearInterval(spawnInterval);
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = 'white';
+            ctx.font = '30px Arial';
+            ctx.textAlign = 'center';
+            monsters.forEach((monster, index) => {
+                monster.remove();
+                monsters.splice(index, 1);
+            });
+
+            ctx.fillText('Score: ' + score, centerX, centerY + 20);
+            replayButton.style.display = 'block'; // Show replay button
+        }
+
+        function resetGame() {
+            gg = 0;
+            score = 0;
+            fireworks.length = 0;
+            particles.length = 0;
+            monsters.length = 0;
+            spawnFrequency = 2000; gamePaused = false; mousedown = false;
+            replayButton.style.display = 'none';
+            spawnInterval = setInterval(createMonster, 2000); // Restart monster spawning
+          
+        }
+
+
+
+
+        function addName() {
+            const creatorLabel = document.createElement('div');
+            creatorLabel.id = 'creator-label';
+            creatorLabel.textContent = 'Made by Solstice';
+            creatorLabel.style.position = 'fixed';
+            creatorLabel.style.top = '10px';
+            creatorLabel.style.left = '10px';
+            creatorLabel.style.color = 'white';
+            creatorLabel.style.fontSize = '14px';
+            creatorLabel.style.fontFamily = '"Times New Roman", Times, serif';
+            creatorLabel.style.backgroundColor = 'rgba(0, 0, 0, 0.6)';
+            creatorLabel.style.padding = '5px 10px';
+            creatorLabel.style.borderRadius = '5px';
+            creatorLabel.style.zIndex = '1000'; // Ensure it stays above other elements
+            document.body.appendChild(creatorLabel);
+        }
+        function pauseInstruction() {
+            const pauseLabel = document.createElement('div');
+            pauseLabel.id = 'pause-instruction';
+            pauseLabel.textContent = '[Space] to pause | [Play] for music';
+            pauseLabel.style.position = 'fixed';
+            pauseLabel.style.top = '40px';  // Adjust the position below the creator label
+            pauseLabel.style.left = '10px';
+            pauseLabel.style.color = 'white';
+            pauseLabel.style.fontSize = '14px';
+            pauseLabel.style.fontFamily = '"Times New Roman", Times, serif';
+            pauseLabel.style.backgroundColor = 'rgba(0, 0, 0, 0.6)';
+            pauseLabel.style.padding = '5px 10px';
+            pauseLabel.style.borderRadius = '5px';
+            pauseLabel.style.zIndex = '1000'; // Ensure it stays above other elements
+            document.body.appendChild(pauseLabel);
+        }
+
+
+        document.getElementById('apply').addEventListener('click', () => {
+            clearInterval(spawnInterval);
+            const frequency = parseInt(document.getElementById('freq').value);
+            spawnFrequency = frequency;
+            spawnInterval = setInterval(createMonster, spawnFrequency);
+        });
+
+        window.onload = () => {
+            addName();
+            pauseInstruction();
+            spawnInterval = setInterval(createMonster, spawnFrequency);
+            loop();
+            gameLoop();
+        };
+
+        document.addEventListener('keydown', function (e) {
+            if (e.code === 'Space') {
+                e.preventDefault();
+                togglePause();
+            }
+        });
+
+        canvas.addEventListener('mousemove', function (e) {
+            mx = e.pageX - canvas.offsetLeft;
+            my = e.pageY - canvas.offsetTop;
+        });
+        canvas.addEventListener('mousedown', function (e) {
+            e.preventDefault();
+            mousedown = true;
+        });
+
+
+        canvas.addEventListener('mouseup', function (e) {
+            e.preventDefault();
+            mousedown = false;
+        });
+
+        // 回调函数在一定时间间隔内最多执行一次
+        function throttle(callback, limit) {
+            let waiting = false;
+            return function (...args) {
+                if (!waiting) {
+                    callback.apply(this, args);
+                    waiting = true;
+                    setTimeout(() => (waiting = false), limit);
+                }
+            };
+        }
+
+        const throttledHandleInput = throttle(handleInput, 100); // Adjust the limit (ms) for desired responsiveness
+
+
+        // Music Player Logic
+        let isPlaying = false;
+        const playPauseBtn = document.getElementById('playPauseBtn');
+        let audio = new Audio(); // We'll load the audio dynamically later
+        // Placeholder for the music collection
+        const musicCollection = ['song1.mp3', 'song2.mp3'];
+        function playNextSong() {
+            const randomSong = musicCollection[Math.floor(Math.random() * musicCollection.length)];
+            audio.src = 'music_collection/' + randomSong; // Make sure this folder exists
+            audio.play();
+        }
+        playPauseBtn.addEventListener('click', function () {
+            if (isPlaying) {
+                audio.pause();
+                playPauseBtn.textContent = '▶️ Play';
+            } else {
+                if (audio.paused || audio.ended) {
+                    playNextSong();
+                }
+                playPauseBtn.textContent = '⏸️ Pause';
+            }
+            isPlaying = !isPlaying;
+        });
+        audio.addEventListener('ended', playNextSong); // Automatically play next song when one finishes
+    </script>
+</body>
+
+</html>
